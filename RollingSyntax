@@ -1,0 +1,67 @@
+function addRollingSyntax(doc){
+   if (doc == null) {
+    Logger.log("No doc specified");
+    return;
+  }
+
+  const refinedSheet = doc.getSheetByName("Refined")
+  if (refinedSheet == null) {
+    Logger.log("Unable to locate Refined sheet in Doc ID: " + doc.getId());
+    return;
+  }
+
+  const rollingSyntaxSheet = doc.getSheetByName("Rolling Syntax")
+  if (rollingSyntaxSheet == null) {
+    Logger.log("Unable to locate Rolling Syntax sheet in Doc ID: " + doc.getId());
+    return;
+  }
+
+  var refined_headers = {}
+  for(var i = 1; i <= refinedSheet.getLastColumn(); i++){
+    refined_headers[i] = refinedSheet.getRange(1, i, 1, refinedSheet.getLastColumn()).getValue();
+  }
+  
+  var rollingSyntax_headers = {};
+  for(var i = 1; i <= rollingSyntaxSheet.getLastColumn(); i++){
+    rollingSyntax_headers[rollingSyntaxSheet.getRange(1, i, 1, rollingSyntaxSheet.getLastColumn()).getValue()] = i;
+  }
+
+  const headerPairIndexes = {};
+  for(key in refined_headers){
+    if(rollingSyntax_headers[refined_headers[key]] >= 1){
+      headerPairIndexes[key] = rollingSyntax_headers[refined_headers[key]];
+    }
+  }
+
+  // store key-value pair of corresponding header 
+  // indexes in "refined" and "rolling syntax" sheets
+  for(var i = 1; i <= rollingSyntax_headers.length; i++){
+    for(var j = 1; j <= refined_headers.length; j++){
+      if(refined_headers[j] == rollingSyntax_headers[i]){
+        headerPairIndexes[i] = j;
+      }
+    }
+  }
+
+  Logger.log("hpindexes = " + JSON.stringify(headerPairIndexes));
+
+ // for each header in headerPairIndexes, populate the proper data in each row. 
+ // the value of "keys" represents the index of the column on the "rolling syntax" sheet
+ for(keys in headerPairIndexes){
+   var rollingSyntax_data = rollingSyntaxSheet.getRange(2, headerPairIndexes[keys], rollingSyntaxSheet.getLastRow() - 1).getDisplayValues().filter(String);
+
+   Logger.log("rolling syntax data = " + rollingSyntax_data);
+
+    var refined_column_data = refinedSheet.getRange(1,keys, refinedSheet.getLastRow(), 1).getDisplayValues();
+    for(var j = 0; j < refined_column_data.length; j++){
+      if(refined_column_data[j] == "ready"){
+      var currentCell = refinedSheet.getRange(j + 1, keys);
+      let randomIndex = Math.floor(Math.random() * rollingSyntax_data.length);
+      currentCell.setValue(rollingSyntax_data[randomIndex]);
+    }
+    }
+    rollingSyntax_data = null;
+  }
+
+}
+
