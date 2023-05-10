@@ -1,0 +1,142 @@
+CLEAN_COMPANY_PROMPT = 'If the name is more than 2 words, make this company name more casual by eliminating words. Do not add any words or letters to the company name. #C&K Strategy Design:C&K #CNK Marketing Group:CNK Marketing #'
+
+/**
+ * Generates text using OpenAI's GPT-3 model
+ * @param {string} prompt The prompt to feed to the GPT-3 model
+ * @param {string} cell The cell to append to the prompt
+ * @param {number} [maxWords=10] The maximum number of words to generate
+ * @return {string} The generated text
+ * @customfunction
+*/
+
+function newCompanyClean(doc){
+  if (doc == null) {
+    Logger.log("No doc specified");
+    return;
+  }
+
+  const refinedSheet = doc.getSheetByName("Refined")
+  if (refinedSheet == null) {
+    Logger.log("Unable to locate Refined sheet in Doc ID: " + doc.getId());
+    return;
+  }
+
+  const data = refinedSheet.getDataRange().getDisplayValues();
+  const headers = data.shift();
+  if(OPENAI_API_KEY == ""){
+    Browser.msgBox("Error: OpenAI API Key Missing from 'Accounts' tab.");
+    return;
+  }
+
+  for (var k in data) {
+
+    const row = Number(k) + 2;
+    const entry = data[k];
+    var company = entry[headers.indexOf("company")];
+    
+    if (company == "ready") {
+      const companyCell = refinedSheet.getRange(row, headers.indexOf("company") + 1);
+      const rawCompany = entry[headers.indexOf("raw_company")];
+      const output = runOpenAI(rawCompany);
+
+      if (output == "Clean Company Failed")
+        {companyCell.setBackground('#FFC7CE');}
+      else {
+        company = output;
+        companyCell.setValue(company);
+      }
+    }
+  }
+}
+
+function runOpenAI(inputcell, maxWords) { 
+  maxTokens = 10
+  if (maxWords){maxTokens = maxWords * 0.75}
+  model = "text-davinci-003"
+  prompt = CLEAN_COMPANY_PROMPT + inputcell + ":",
+  temperature = 0;
+
+  // Set up the request body with the given parameters
+  const requestBody = {
+    "model": model,
+    "prompt": prompt,
+    "temperature": temperature,
+    "max_tokens": maxTokens
+  };
+  console.log(requestBody)
+
+  // Set up the request options with the required headers
+  const requestOptions = {
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer "+ OPENAI_API_KEY,
+      "Retry-After": "7"
+    },
+    "payload": JSON.stringify(requestBody)
+  };
+  // Send the request to the GPT-3 API endpoint for completions
+  try {
+    const response = UrlFetchApp.fetch("https://api.openai.com/v1/completions", requestOptions);
+    Logger.log(response.getResponseCode());
+    if(response.getResponseCode() == 200){
+      // Get the response body as a JSON object
+      const responseBody = JSON.parse(response.getContentText());
+      let answer = responseBody.choices[0].text
+      // Return the generated text from the response
+      //return JSON.stringify(answer);
+      return answer;
+    }
+    else return false;
+  } catch (e) {
+  return runOpenAI2(inputcell, maxWords);
+  }
+}
+
+// second function call in the case of an error
+function runOpenAI2(inputcell, maxWords) { 
+  Logger.log("went into second openAI func")
+  Utilities.sleep(500);
+  maxTokens = 10
+  if (maxWords){maxTokens = maxWords * 0.75}
+  model = "text-davinci-003"
+  prompt = CLEAN_COMPANY_PROMPT + inputcell + ":",
+  temperature = 0;
+
+  // Set up the request body with the given parameters
+  const requestBody = {
+    "model": model,
+    "prompt": prompt,
+    "temperature": temperature,
+    "max_tokens": maxTokens
+  };
+  console.log(requestBody)
+
+  // Set up the request options with the required headers
+  const requestOptions = {
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer "+ OPENAI_API_KEY,
+      "Retry-After": "7"
+    },
+    "payload": JSON.stringify(requestBody)
+  };
+  // Send the request to the GPT-3 API endpoint for completions
+  try {
+    const response = UrlFetchApp.fetch("https://api.openai.com/v1/completions", requestOptions);
+    Logger.log(response.getResponseCode());
+    if(response.getResponseCode() == 200){
+      // Get the response body as a JSON object
+      const responseBody = JSON.parse(response.getContentText());
+      let answer = responseBody.choices[0].text
+      // Return the generated text from the response
+      //return JSON.stringify(answer);
+      return answer;
+    }
+    else return false;
+  } catch (e) {
+  return runOpenAI2(inputcell, maxWords);
+  }
+}
+
