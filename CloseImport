@@ -1,0 +1,126 @@
+function processRefinedEntries(doc){
+  
+  if (doc == null) {
+    Logger.log("No doc specified");
+    return;
+  }
+
+  const refinedSheet = doc.getSheetByName("Refined")
+  if (refinedSheet == null) {
+    Logger.log("Unable to locate Refined sheet in Doc ID: " + doc.getId());
+    return;
+  }
+
+  // alert or prompt?
+  const ui = SpreadsheetApp.getUi();
+  // const response = ui.alert("Do you want to use the Sender Column?", ui.ButtonSet.YES_NO);
+  // const useManualSender = response == ui.Button.YES;
+  
+  const data = refinedSheet.getDataRange().getDisplayValues();
+  const headers = data.shift();
+
+  // make hashmap of all the custom fields in a close account
+  var customFieldNameToIdMap = createCustomFieldObj(headers);
+
+  var senderInfo = getSenderInfo(); 
+  var sequenceInfo = getSequenceInfo();
+  const sequenceRow = headers.indexOf("Sequence")
+  const closeImportColIdx = headers.indexOf("Close Import")
+
+  for (var k in data) {
+
+    const row = Number(k) + 2;
+    const entry = data[k];
+  
+    const importCell = refinedSheet.getRange(row, closeImportColIdx + 1);
+    const importVal = entry[closeImportColIdx];
+    if (importVal != "ready") continue;
+
+    var company = entry[headers.indexOf("company")];
+    if (company == "" || company == "ready") {
+      importCell.setValue("Invalid Company Name");
+      importCell.setBackground('#FFC7CE');
+      continue;
+    }
+
+    // push current row's sequence & email info to end of entry[] for enrollment 
+    entry.push(sequenceInfo[entry[sequenceRow]]);
+    // randomly select inbox to send from 
+    let randomIndex = Math.floor(Math.random() * senderInfo.length);
+    entry.push(senderInfo[randomIndex])
+    Logger.log(entry);
+    
+    const result = newCloseImport(headers, entry, customFieldNameToIdMap);
+    importCell.setValue(result);
+
+    Utilities.sleep(700);
+  }
+}
+
+function newCloseImport(headers, entry, customFieldNameToIdMap) {
+
+  const email = entry[headers.indexOf("email")];
+  const lastEntryIdx = entry.length - 1;
+
+  if (checkContactExists(JSON.stringify(email))) {
+    return "contact already exists";
+  }
+  
+  if(!validateEmail(email)) {
+    return "invalid email";
+  }
+
+  const contact_id = newCreateLead(headers, entry, customFieldNameToIdMap);
+  Logger.log(contact_id);
+  if (contact_id[0] == false) {
+    return contact_id[1];
+  }
+
+  let seq_success = enrollContact(contact_id[1], entry[lastEntryIdx - 1], entry[lastEntryIdx][0], entry[lastEntryIdx][1]);
+  
+  // return if they were successfully enrolled or not
+  return seq_success == true ? "import success, successfully enrolled" : "import success, enrollment fail";
+}
+
+function newCreateLead(headers, entry, customFieldNameToIdMap) {
+
+  var body = {
+    "name": entry[headers.indexOf("company")],
+    "contacts": [
+      {
+        "name": entry[headers.indexOf("firstname")] + " " + entry[headers.indexOf("lastname")],
+        "title": entry[headers.indexOf("title")],
+        "emails": [
+          {
+              "type": "office",
+              "email": entry[headers.indexOf("email")]
+          },
+        ]
+      }
+    ]
+  };
+
+  var custom_fields = customFieldsPayload(customFieldNameToIdMap, entry, headers)
+  // if any custom fields are marked as "ready", return false
+  if(!custom_fields){return [false, "Contact not Created. Check Your Custom Field Data & Headers."]}
+
+  Object.assign(body.contacts[0], custom_fields);
+
+  Logger.log("New Lead Body: " + JSON.stringify(body));
+
+  // parameters, using close's documentation
+  let params = makePostParams(body);
+
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/lead/', params);
+  Logger.log(response.getResponseCode());
+
+  if(response.getResponseCode() == 200) {
+    var text = response.getContentText();
+    Logger.log(text); //<-- for debugging
+    var json = JSON.parse(text);  
+    return [true, json.contacts[0].id];
+  }
+
+  return [false, "Contact Not Created. Check Headers & Data."];
+}
