@@ -1,0 +1,64 @@
+CALENDLY_TOKEN = "eyJraWQiOiIxY2UxZTEzNjE3ZGNmNzY2YjNjZWJjY2Y4ZGM1YmFmYThhNjVlNjg0MDIzZjdjMzJiZTgzNDliMjM4MDEzNWI0IiwidHlwIjoiUEFUIiwiYWxnIjoiRVMyNTYifQ.eyJpc3MiOiJodHRwczovL2F1dGguY2FsZW5kbHkuY29tIiwiaWF0IjoxNjc3Mzk1MTg0LCJqdGkiOiIwMTQ2YTkxYy1iM2I0LTRiMmUtOWZhZS0wNDY4ZDBhODExZDYiLCJ1c2VyX3V1aWQiOiIyYmNkZmVlZi00OGM1LTQ2NGEtODExYi1lNmRkNWZjNjcwNWYifQ.mpuRZIvR-wwU03_qdb3AkmByJCduEgCbSkvnWY_9ebmF9JSbq8S4GfvhQwornBDZA9nKwxTs4GeczAsGAYShpA"
+
+function getEventAvailability() {
+  let params = {
+  "method": "GET",
+  'Content-Type': 'application/json',
+  "headers": {
+  "Authorization": "Bearer " + CALENDLY_TOKEN},
+  }
+
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.calendly.com/event_type_available_times?user=https://api.calendly.com/users/2bcdfeef-48c5-464a-811b-e6dd5fc6705f', params);
+  var text = response.getContentText();
+  Logger.log(text); //  <-- for debugging
+  var json = JSON.parse(text); 
+}
+
+function getEventTypes() {
+  let params = {
+  "method": "GET",
+  'Content-Type': 'application/json',
+  "headers": {
+  "Authorization": "Bearer " + CALENDLY_TOKEN},
+  }
+
+  // make API call;
+  /**
+   * 
+   * END OF THE URL NEEDS TO BE FIXED - MUST INCLUDE START TIME AND END TIME AS PER https://developer.calendly.com/api-docs/6a1be82aef359-list-event-type-available-times
+   */
+  const response = UrlFetchApp.fetch('https://api.calendly.com/event_types?event_type=https://api.calendly.com/event_types/6abcdbc6-a948-473b-8cd4-2c7c86d9e5be&end_time=', params);
+  var text = response.getContentText();
+  Logger.log(text); //  <-- for debugging
+  var json = JSON.parse(text); 
+}
+
+// gets information like user URI for other function calls 
+function getUserID() {
+  let params = {
+  "method": "GET",
+  'Content-Type': 'application/json',
+  "headers": {
+  "Authorization": "Bearer " + CALENDLY_TOKEN},
+  }
+
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.calendly.com/users/me', params);
+  var text = response.getContentText();
+  Logger.log(text); //  <-- for debugging
+  var json = JSON.parse(text); 
+}
+
+/*
+  let timeslots = 0;
+
+  //for(var i = 0; )
+    // if(// API call returns valid timeslot)
+      // add timeslot to array 
+      // increment timeslots var by 1
+      // check if timeslots == 2...
+        // if so, break and return array.
+    // if there are no timeslots available, return something else.... 
+
+*/ 
