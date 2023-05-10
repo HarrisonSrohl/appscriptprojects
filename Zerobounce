@@ -1,0 +1,39 @@
+//precondition: pass in email to be validated 
+// postcondition: returns validity status of the email
+function validateEmail(email){
+  let params = {
+    "method": "GET",
+    "retry-after": "10"
+  }
+  try{
+  const response = UrlFetchApp.fetch("https://api.zerobounce.net/v2/validate?api_key=" + ZEROBOUNCE_API_KEY + "&email=" + email + "&ip_address=" , params);
+  var text = response.getContentText();
+  Logger.log(text); // <-- for debugging
+  var json = JSON.parse(text); 
+  return json.status == "valid";
+  }
+  catch(e){
+    return validateEmail2(email)
+  }
+}
+
+function validateEmail2(email){
+  let params = {
+    "method": "GET",
+    "retry-after": "10"
+  }
+  try{
+  const response = UrlFetchApp.fetch("https://api.zerobounce.net/v2/validate?api_key=" + ZEROBOUNCE_API_KEY + "&email=" + email + "&ip_address=" , params);
+  var text = response.getContentText();
+  Logger.log(text); //<-- for debugging
+  var json = JSON.parse(text); 
+  return json.status == "valid";
+  }
+  catch(e){
+    return false
+  }
+}
+
+function testValidate(email){
+  Logger.log(validateEmail(email))
+}
