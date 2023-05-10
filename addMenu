@@ -1,0 +1,8 @@
+function addMenu() {
+  const ui = SpreadsheetApp.getUi();
+  const functionsMenu = ui.createMenu("Functions");
+  functionsMenu.addItem("Import Contacts", "localCloseImport");
+  functionsMenu.addItem("Clean Companies", "localCompanyClean");
+  functionsMenu.addItem("Populate Rolling Syntax", "localRollingSyntax");
+  functionsMenu.addToUi();
+}
