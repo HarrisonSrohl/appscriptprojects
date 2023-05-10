@@ -1,0 +1,476 @@
+function makePostParams(body){
+  let params = {
+  "method": "POST",
+  "headers": {
+  "x-api-key": CLOSE_API_KEY,
+  "Authorization": CLOSE_AUTH,
+  "content-type": "application/json",
+  },
+  "payload": JSON.stringify(body),
+  }
+  return params;
+}
+
+function makeGetParams(){
+  let params = {
+  "method": "GET",
+  "headers": {
+  "x-api-key": CLOSE_API_KEY,
+  "Authorization": CLOSE_AUTH,
+    },
+  }
+  Logger.log(params);
+  return params;
+}
+
+function openSheet()
+{
+  // open the sheet
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Refined");
+  return sheet;
+}
+
+// Precondition: pass in a contact's email
+// Postcondition: returns true if contact already exists in close
+function checkContactExists(email){
+  try {
+    // set up JSON syntax for search
+    let body = checkContactExistsPayload(email); 
+  
+    // parameters for /search endpoint, per close's documentation
+    var params = makePostParams(body);
+  
+    // make API call;
+    const response = UrlFetchApp.fetch('https://api.close.com/api/v1/data/search/', params);
+    var text = response.getContentText();
+    // Logger.log(text); <-- for debugging
+    var json = JSON.parse(text); 
+  
+   // if no data in json available, then contact is not in CRM - return false. 
+   // Else, contact exists. Return true. 
+    return json.data.length > 0;
+  }
+  catch(e) {
+    Utilities.sleep(5000);
+    checkContactExists(email);
+  }
+}
+
+// manually test checkContactExist function
+function testCheckContExists(){
+  Logger.log(checkContactExists("harrisonstrohlm@gmail.com"))
+}
+
+// helper function that converts raw data into properly 
+// formatted payload for advanced filter search in Close
+function checkContactExistsPayload(email){
+  let body = {
+    "limit": null,
+    "query": {
+        "negate": false,
+        "queries": [
+            {
+                "negate": false,
+                "object_type": "contact",
+                "type": "object_type"
+            },
+            {
+                "negate": false,
+                "queries": [
+                    {
+                        "negate": false,
+                        "related_object_type": "contact_email",
+                        "related_query": {
+                            "negate": false,
+                            "queries": [
+                                {
+                                    "condition": {
+                                        "mode": "phrase",
+                                        "type": "text",
+                                        "value": email
+                                    },
+                                    "field": {
+                                        "field_name": "email",
+                                        "object_type": "contact_email",
+                                        "type": "regular_field"
+                                    },
+                                    "negate": false,
+                                    "type": "field_condition"
+                                }
+                            ],
+                            "type": "and"
+                        },
+                        "this_object_type": "contact",
+                        "type": "has_related"
+                    }
+                ],
+                "type": "and"
+            }
+        ],
+        "type": "and"
+    },
+    "results_limit": null,
+    "sort": []
+  }
+  // return object
+  return body; 
+}
+
+// pre-condition: take in cell address 
+// postcondition: creates new lead in close, 
+// returns array containing two values:
+// idx[0] = boolean represents if contact was successfully created or not
+// idx[1] = if successful, stores the contact ID of newly created lead/
+function createLead(headers, currentRow){
+  var body = formatLeadPayload(headers, currentRow);
+  body = JSON.parse(body);
+
+  // parameters, using close's documentation
+  let params = makePostParams(body);
+
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/lead/', params);
+  Logger.log(response.getResponseCode());
+  if(response.getResponseCode() == 200){
+    var text = response.getContentText();
+    Logger.log(text); //<-- for debugging
+    var json = JSON.parse(text);  
+    return [true, json.contacts[0].id];
+  }
+  else{return [false]}
+}
+
+function testCreateLead(){
+  var lead = createLead("$J$624"); 
+  Logger.log(lead);
+}
+
+// precondition: pass in key-value paired object with lead data
+// postcondition: returns JSON payload for close's lead endpoint
+function formatLeadPayload(headers, currentRow){
+  var entry = sheetRowToJSON(headers, currentRow);
+
+  // object that contains key-value pair of 
+  // custom fields found in header column
+  var cust_obj = customFieldsPayload(createCustomFieldObj(), headers, currentRow);
+  if(!cust_obj){return false}
+
+  let body = {
+  "name": entry.properties.company,
+  "contacts": [
+            {
+  "name": entry.properties.firstname + " " + entry.properties.lastname,
+  "title": entry.properties.title,
+  "emails": [
+                {
+                    "type": "office",
+                    "email": entry.properties.email
+                },
+          ]
+        }
+    ]
+  }
+  //add custom fields to the contact
+  Object.assign(body.contacts[0], cust_obj);
+  //Logger.log("body is sent as" + JSON.stringify(body));
+  return JSON.stringify(body); 
+}
+
+// precondition: pass in reference to array of header columns & index of a sheet row
+// Postcondition: returns a key-value paired object from sheet data  
+// that can be converted into JSON data for API calls
+function sheetRowToJSON(headers, currentRow){
+  var sheet = openSheet();
+  // values in current row get put into array for json values
+  const dataArr = sheet.getRange(currentRow, 1, 1, sheet.getLastColumn()).getValues()[0];
+  Logger.log("dataArr is " + dataArr);
+  
+  // create key-value paired object using header + row data
+  var entry = {properties: {}};
+  for(var i = 0; i < dataArr[0].length; i++) {
+     var row = dataArr[i];
+     entry.properties[headers[i]] = row;
+  }
+
+  Logger.log("entry is" + JSON.stringify(entry));
+  return entry
+}
+
+// list all existing sequences in close
+function listSequences(){
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/sequence/?_skip=0&_limit=100', makeGetParams());
+  var text = response.getContentText();
+  // Logger.log(text); <-- for debugging
+  var json = JSON.parse(text); 
+ // Logger.log(JSON.stringify(json));
+  return json;
+}
+
+function testlistSequence(){
+  var seq = listSequences();
+  Logger.log(seq);
+}
+
+// returns Hashmap of active seqeunces in close, where 
+// key = sequence name account and value = sequence id
+function getSequenceInfo(){
+  var sequences = listSequences(); 
+  let output = {};
+  for(var i = 0; i < sequences.data.length; i++){
+    output[sequences.data[i].name] = sequences.data[i].id;
+  };
+  // Logger.log(output);
+  return output;
+}
+
+function findSequenceID(sequenceName){
+  // Logger.log("looking for sequence - " + sequenceName);
+  // API call to retrieve all current sequences in close (JSON format)
+  var seqList = listSequences();
+  // Logger.log("seq list is " + JSON.stringify(seqList));
+  // initialize variable to store correct sequenceID
+  var seqID = null;  
+
+  //compare names to find correct sequenceID 
+  for(var i = 0; i < seqList.data.length; i++){
+    //Logger.log("comparing" + sequenceName + "to " + seqList.data[i].name)
+    if (sequenceName === seqList.data[i].name){
+      //Logger.log("Found sequence on step " + i + ":" + seqList.data[i].name)
+      seqID = seqList.data[i].id;
+      Logger.log("sequence ID is:" + seqID)
+      break;
+    }
+  }
+
+  if(seqID == null){
+    return "no sequence found."
+  }
+  else{
+    return seqID;
+  }
+}
+
+function testFindSequenceID(){
+  Logger.log(findSequenceID("LeadRush StartUp SaaS Prospects V2"));
+}
+
+function findSingleSequence(){
+  var seqID = "";
+
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/sequence/' + seqID + '/', makeGetParams());
+  var text = response.getContentText();
+  // Logger.log(text); <-- for debugging
+  var json = JSON.parse(text); 
+  return json;
+}
+
+function enrollContact(contact_id, sequence_id, sender_email, sender_id){
+  let body = {
+    "sequence_id": sequence_id, 
+    "contact_id": contact_id,
+    "sender_account_id": sender_id,
+    "sender_name": SENDER_NAME,
+    "sender_email": sender_email,
+  }
+  Logger.log(body);
+  var params = makePostParams(body); 
+
+  // make request and manage response 
+  try {
+    const response = UrlFetchApp.fetch('https://api.close.com/api/v1/sequence_subscription/',params);
+    Logger.log(response);
+    if(response.getResponseCode() == 201) return true;
+    else return false;
+  } catch (e) {
+  return false;
+  }
+}
+
+function testEnroll(){
+  let enroll = enrollContact("cont_LrOdNHyj6Rl3C4Rl2WTz75OEMsyXC9M8xmgXgnut3S1", "seq_6PpgURs7VI9jL9UyuE0mLK", "lead@leadrushlab.com")
+  Logger.log(enroll);
+}
+
+// returns list of sequence subscriptions
+function getSequenceSubscriptions(){
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/bulk_action/sequence_subscription/', makeGetParams());
+  var text = response.getContentText();
+  //Logger.log(text);
+  var json = JSON.parse(text); 
+  return json;
+}
+
+function testGetSequenceSubscriptions(){
+  let body = getSequenceSubscriptions(); 
+  Logger.log(body)
+}
+
+function getConnectedAccounts(close_user_id){
+  // parameters, using close's documentation
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/connected_account/?' + close_user_id + '/', makeGetParams());
+  var text = response.getContentText();
+  // Logger.log(text);
+  var json = JSON.parse(text); 
+
+  return json;
+}
+
+function testGetConnectedAccounts(){
+  let body = getConnectedAccounts(CLOSE_USER_ID); 
+  Logger.log(body)
+}
+
+
+function getAllUsers(){
+  // parameters, using close's documentation
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/user/', makeGetParams());
+  var text = response.getContentText();
+  Logger.log(text);
+  var json = JSON.parse(text); 
+
+  return json;
+}
+
+function findSenderID_1(sender_email){
+  var connected_accounts = getConnectedAccounts(CLOSE_USER_ID); 
+  for(var i = 0; i < connected_accounts.data.length; i++){
+    if(connected_accounts.data[i].email == sender_email){
+      return connected_accounts.data[i].id;
+    }
+  }
+  return "sender email account not found."
+}
+
+function testfindSenderID_1(){
+  let body = findSenderID_1("lead@leadrushlab.com"); 
+  Logger.log(body)
+}
+
+// returns 2D array of connected close email accounts, where 
+// output[0] = email account and output[1] = email acc id 
+function getSenderInfo(){
+  var connected_accounts = getConnectedAccounts(CLOSE_USER_ID); 
+  let output = [];
+  for(var i = 0; i < connected_accounts.data.length; i++){
+    output.push([connected_accounts.data[i].email, connected_accounts.data[i].id]);
+  };
+  Logger.log(output);
+  return output;
+}
+
+function testGetSenderInfo(){
+  Logger.log(getSenderInfo());
+}
+
+// postcondition: return array of header columns that 
+// are custom contact fields in close.
+// Returned value will NOT be sent in json payload.
+function createCustomFieldObj(headers){
+
+  var headerHashtable = new Set();
+  for (var i = 0; i < headers.length; i++){
+    headerHashtable[headers[i]] = headers[i];
+  }
+
+  // initialize array to return only custom fields
+  var custom_fields_obj = {}; 
+
+  // check through all lead custom fields 
+  /*
+  var lead_custom_fields = listAllLeadCustomFields(); 
+  for(var i = 0; i < lead_custom_fields.data.length; i++){
+    // if headerHash contains a lead custom field, add to custom_field array. 
+    if(headerHashtable.hasOwnProperty(lead_custom_fields.data[i].name)){
+      // push key/value pair into object
+     custom_fields_obj[lead_custom_fields.data[i].name] = "custom." + lead_custom_fields.data[i].id;
+    }
+  }
+  */ 
+
+
+  // check through all contact custom fields 
+  var contact_custom_fields = listAllContactCustomFields();
+  for(var i = 0; i < contact_custom_fields.data.length; i++){
+    if(headerHashtable.hasOwnProperty(contact_custom_fields.data[i].name)){
+      custom_fields_obj[contact_custom_fields.data[i].name] = "custom." + contact_custom_fields.data[i].id;
+    }
+  }
+
+  // check through all shared custom fields
+  var shared_custom_fields = listAllSharedCustomFields();
+  for(var i = 0; i < shared_custom_fields.data.length; i++){
+    if(headerHashtable.hasOwnProperty(shared_custom_fields.data[i].name)){
+      // check if field is already in the object - skip if true
+      if(custom_fields_obj.hasOwnProperty(shared_custom_fields.data[i].name)){
+        continue;
+      }
+      // else, add to object
+      custom_fields_obj[shared_custom_fields.data[i].name] = "custom." + shared_custom_fields.data[i].id;
+    }
+  }
+
+  return custom_fields_obj; 
+}
+
+// postcondition: pass in array of custom fields from close and 
+// cell address
+// postcondtion: return key-value paired object of custom fields
+function customFieldsPayload(custom_fields_obj, entry, headers){
+  var custom_props = {}; 
+
+ for(key in custom_fields_obj){
+    if(entry[headers.indexOf(key)] == "ready" || entry[headers.indexOf(key)] == ""){
+      return false;
+    }
+    if(headers.indexOf(key) >= 0) 
+    { 
+      custom_props[custom_fields_obj[key]] = entry[headers.indexOf(key)];
+    }
+ }
+  return custom_props;
+}
+
+function listAllContactCustomFields(){
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/custom_field/contact/', makeGetParams());
+  var text = response.getContentText();
+  var json = JSON.parse(text); 
+  return json;
+}
+
+function listAllSharedCustomFields(){
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/custom_field/shared/', makeGetParams());
+  var text = response.getContentText();
+  var json = JSON.parse(text); 
+  return json;
+}
+
+function listAllLeadCustomFields(){
+  // make API call;
+  const response = UrlFetchApp.fetch('https://api.close.com/api/v1/custom_field/lead/', makeGetParams());
+  var text = response.getContentText();
+  // Logger.log("listAllLeadCustomFields: " + text);
+  var json = JSON.parse(text); 
+  return json;
+}
+
+function customFieldDropDown(doc){
+  var contact_custom_fields = listAllContactCustomFields();
+  var contact_custom_fields_array  = []; 
+  for(var i = 0; i < contact_custom_fields.data.length; i++){
+    contact_custom_fields_array.push(contact_custom_fields.data[i].name);
+  }
+  
+  // Create the data validation rule
+  var dataValidationRule = SpreadsheetApp.newDataValidation().requireValueInList(contact_custom_fields_array).build();
+  
+  // Set the data validation rule on the active range
+  doc.activeRange.setDataValidation(dataValidationRule);
+}
