@@ -1,0 +1,24 @@
+ACCOUNT_HEADERS = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Accounts").getRange(1, 1, 1, 20).getValues()[0];
+CODE_VALS_COLUMN = ACCOUNT_HEADERS.indexOf("Code Values") + 1;
+// add key-values from sheet to object
+var data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Accounts").getDataRange().getValues();
+var globalVals = {};
+for (var i = 0; i < data.length; i++) {
+  if (data[i][CODE_VALS_COLUMN] != "") {
+    globalVals[data[i][CODE_VALS_COLUMN]] = data[i][CODE_VALS_COLUMN+1];
+  }
+}
+CLOSE_API_KEY = globalVals["Close API Key"];
+CLOSE_AUTH = globalVals["Close Auth Key"];
+CLOSE_USER_ID = globalVals["Close User ID"];
+SENDER_NAME = globalVals["Close Sender Name"];
+OPENAI_API_KEY = globalVals["OpenAI API Key"];
+ZEROBOUNCE_API_KEY = globalVals["ZeroBounce API Key"];
+HIGHLEVEL_API = globalVals["GoHighLevel API Key"];
+HIGHLEVEL_CLIENT_ID = globalVals["GoHighLevel Client ID"];
+HIGHLEVEL_SECRET = globalVals["GoHighLevel Client Secret"];
+HIGHLEVEL_AUTH = globalVals["GoHighLevel Authorization"];
+
+function getvars(){
+  Logger.log(ZEROBOUNCE_API_KEY);
+}
